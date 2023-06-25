@@ -1,102 +1,101 @@
-// Including all inputs at the top for easier access
-input int InpFastMAPeriods = 5;
-input ENUM_MA_METHOD InpFastMAMethod = MODE_SMA;
-input int InpMediumMAPeriods = 8;
-input ENUM_MA_METHOD InpMediumMAMethod = MODE_SMA;
-input int InpSlowMAPeriods = 13;
-input ENUM_MA_METHOD InpSlowMAMethod = MODE_SMA;
-input double InpStopLossPips = 25.0;
-input double InpTakeProfitPips = 25.0;
-input double InpOrderSize = 1.0;
-input string InpTradeComment = "TripleCross";
-input int InpMagicNumber = 2005021;
-double TakeProfit;
-double StopLoss;
+#include	<Forex-Trading-EA/TripleCross/Filters/TripleCrossFilter.mqh>
 
-// Function to determine the pip size
-double PipSize(string symbol) {
-    return (MarketInfo(symbol, MODE_POINT) * ((int)MarketInfo(symbol, MODE_DIGITS) % 2 == 1 ? 10 : 1));
+// Function for pip conversion
+double	PipSize(string symbol)	{
+	double	point = MarketInfo(symbol, MODE_POINT);
+	int		digits = (int)MarketInfo(symbol, MODE_DIGITS);
+	return( ((digits%2)==1) ? point*10 : point);
 }
+double	PipsToPrice(double pips, string symbol)	{	return(pips*PipSize(symbol));	}
 
-// Function to convert pips to price
-double PipsToPrice(double pips, string symbol) {
-    return pips * PipSize(symbol);
-}
+// Inputs
+input	int	InpFastMAPeriods = 5, InpMediumMAPeriods = 8, InpSlowMAPeriods = 13;
+input	ENUM_MA_METHOD	InpFastMAMethod = MODE_SMA, InpMediumMAMethod = MODE_SMA, InpSlowMAMethod = MODE_SMA;
+input	double	InpStopLossPips = 25.0, InpTakeProfitPips = 25.0, InpOrderSize = 1.0;
+input	string	InpTradeComment = "TripleCrossV2";
+input	int	InpMagicNumber = 201301;
 
-// Function to validate the inputs
-int ValidateInputs() {
-    // Check if Fast < Medium < Slow
-    if (InpFastMAPeriods >= InpMediumMAPeriods || InpMediumMAPeriods >= InpSlowMAPeriods) {
-        Print("Fast must be < Medium < Slow");
-        return INIT_PARAMETERS_INCORRECT;
-    }
-    // Check if all periods are greater than zero
-    if (InpFastMAPeriods < 1) {
-        Print("All periods must be >= 1");
-        return INIT_PARAMETERS_INCORRECT;
-    }
-    // Check if SL and TP are positive
-    if (InpTakeProfitPips <= 0 || InpStopLossPips <= 0) {
-        Print("SL and TP must be > 0");
-        return INIT_PARAMETERS_INCORRECT;
-    }
-    // Convert SL and TP to a decimal matching price format
-    TakeProfit = PipsToPrice(InpTakeProfitPips, Symbol());
-    StopLoss = PipsToPrice(InpStopLossPips, Symbol());
-    return INIT_SUCCEEDED;
-}
+double	TakeProfit, StopLoss;
+CTripleCrossFilter	*Filter;
 
-// Function to check if it is a new bar
-bool IsNewBar() {
-    static datetime currentTime = 0;
-    bool isNewBar = (currentTime != Time[0]);
-    if (isNewBar) currentTime = Time[0];
-    return isNewBar;
-}
-
-// Function to filter the trade signal
-int TradeFilter() {
-    double fma1 = iMA(Symbol(), Period(), InpFastMAPeriods, 0, InpFastMAMethod, PRICE_CLOSE, 1);
-    double mma1 = iMA(Symbol(), Period(), InpMediumMAPeriods, 0, InpMediumMAMethod, PRICE_CLOSE, 1);
-    double sma1 = iMA(Symbol(), Period(), InpSlowMAPeriods, 0, InpSlowMAMethod, PRICE_CLOSE, 1);
-
-    if (fma1 > mma1 && mma1 > sma1) return 1;
-    else if (fma1 < mma1 && mma1 < sma1) return -1;
-    return 0;
-}
-
-// Function to place a trade
-void OpenTrade(ENUM_ORDER_TYPE orderType) {
-    double openPrice = orderType == ORDER_TYPE_BUY ? Ask : Bid;
-    double takeProfitPrice = openPrice + (orderType == ORDER_TYPE_BUY ? TakeProfit : -TakeProfit);
-    double stopLossPrice = openPrice - (orderType == ORDER_TYPE_BUY ? StopLoss : -StopLoss);
-
-    OrderSend(Symbol(), orderType, InpOrderSize, openPrice, 0, stopLossPrice, takeProfitPrice, InpTradeComment, InpMagicNumber);
-}
-
-// Expert initialization function
+// Initialize
 int OnInit() {
-    if (!IsDemo()) return INIT_FAILED;
-    int result = ValidateInputs();
-    if (result != INIT_SUCCEEDED) return result;
-    IsNewBar();
-    return result;
+	if (!IsDemo())	return(INIT_FAILED);	
+	Filter = new CTripleCrossFilter(InpFastMAPeriods, InpFastMAMethod, InpMediumMAPeriods, InpMediumMAMethod, InpSlowMAPeriods, InpSlowMAMethod);
+	if (Filter.InitResult()!=INIT_SUCCEEDED)	return(Filter.InitResult());
+	int	result = ValidateInputs();	
+	if (result!=INIT_SUCCEEDED)	return(result);
+	IsNewBar();
+   return(result);
 }
 
-// Expert tick function
-void OnTick() {
-    if (!IsNewBar()) return;
-    int signal = TradeFilter();
-    if (signal == 1) OpenTrade(ORDER_TYPE_BUY);
-    else if (signal == -1) OpenTrade(ORDER_TYPE_SELL);
-}
-
-// Expert deinitialization function
+// Deinitialize
 void OnDeinit(const int reason) {
-    // Empty
+	delete	Filter;
 }
 
-// ChartEvent function
-void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam) {
-    // Empty
+// Tick function
+void OnTick() {
+	if (!IsTesting() && !Filter.TradeAllowed())	return;
+	if (!IsNewBar())	return;
+	Filter.UpdateFilter();
+	switch(Filter.ExitFilter()) {
+		case OFX_FILTER_BUY:	CloseTrade(ORDER_TYPE_BUY);	break;
+		case OFX_FILTER_SELL:	CloseTrade(ORDER_TYPE_SELL);	break;
+	}
+	switch(Filter.EntryFilter()) {
+		case OFX_FILTER_BUY:	OpenTrade(ORDER_TYPE_BUY);	break;
+		case OFX_FILTER_SELL:	OpenTrade(ORDER_TYPE_SELL);	break;
+	}
+	return;
+}
+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)  { }
+
+int	ValidateInputs() {
+	if (InpTakeProfitPips<=0 || InpStopLossPips<=0) {
+		Print("SL and TP must be > 0");
+		return(INIT_PARAMETERS_INCORRECT);
+	}
+	TakeProfit = PipsToPrice(InpTakeProfitPips, Symbol());
+	StopLoss = PipsToPrice(InpStopLossPips, Symbol());
+	return(INIT_SUCCEEDED);
+}
+
+// Check for new bar
+bool	IsNewBar() {
+	static datetime	currentTime = 0;
+	bool	result = (currentTime != Time[0]);
+	if (result) currentTime = Time[0];
+	return(result);
+}
+
+// Open trade
+void	OpenTrade(ENUM_ORDER_TYPE	orderType) {
+	double	takeProfitPrice, stopLossPrice, openPrice;
+	if (orderType==ORDER_TYPE_BUY) {
+		openPrice = Ask;
+		takeProfitPrice = openPrice+TakeProfit;
+		stopLossPrice = Bid-StopLoss;
+	} else {
+		openPrice = Bid;
+		takeProfitPrice = openPrice-TakeProfit;
+		stopLossPrice = Ask+StopLoss;
+	}
+	int	ticket = OrderSend(Symbol(), orderType, InpOrderSize, openPrice, 0, stopLossPrice, takeProfitPrice, InpTradeComment, InpMagicNumber);
+}
+
+// Close trade
+bool	CloseTrade(ENUM_ORDER_TYPE	orderType) {
+	bool	result = true;
+	PrintFormat("Closing %s orders due to signal", EnumToString(orderType));
+	int	cnt = OrdersTotal();
+	for (int i = cnt-1; i>=0; i--) {
+		if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+			if (OrderSymbol()==Symbol() && OrderMagicNumber()==InpMagicNumber && OrderType()==orderType) {
+				result &= OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), 0, clrYellow);
+			}
+		}
+	}
+	return(result);
 }
