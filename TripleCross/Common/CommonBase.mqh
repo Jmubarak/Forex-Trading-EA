@@ -1,56 +1,74 @@
-
+/**
+ * @class CCommonBase
+ * @brief Base class providing common functionalities for trading strategies.
+ * 
+ * This class encapsulates common properties and methods that are shared across different trading strategies.
+ */
 class CCommonBase {
+protected:
+    int mDigits;                 ///< Number of decimal places for the trading symbol.
+    string mSymbol;              ///< Trading symbol.
+    ENUM_TIMEFRAMES mTimeframe;  ///< Timeframe for the trading strategy.
+    
+    string mInitMessage;         ///< Initialization message.
+    int mInitResult;             ///< Result of the initialization.
 
-private:
+    /**
+     * @brief Initialize the base with provided symbol and timeframe.
+     * @return Initialization result.
+     */
+    int Init(string symbol, ENUM_TIMEFRAMES timeframe);
 
-protected:	//	Members
+    /**
+     * @brief Set the initialization result and message.
+     * @return Initialization result.
+     */
+    int SetInitResult(string initMessage, int initResult) {
+        mInitMessage = initMessage;
+        mInitResult = initResult;
+        return initResult;
+    }
 
-	int					mDigits;
-	string				mSymbol;
-	ENUM_TIMEFRAMES	mTimeframe;
-	
-	string				mInitMessage;
-	int					mInitResult;
+public:
+    /// @brief Default constructor.
+    CCommonBase() : CCommonBase(_Symbol, (ENUM_TIMEFRAMES)_Period) {}
 
-protected:	//	Constructors
+    /**
+     * @brief Constructor with symbol.
+     */
+    CCommonBase(string symbol) : CCommonBase(symbol, (ENUM_TIMEFRAMES)_Period) {}
 
-	//
-	//	Constructors
-	//
-	CCommonBase()																		{	Init(_Symbol,	(ENUM_TIMEFRAMES)_Period);				}
-	CCommonBase(string symbol)														{	Init(symbol,	(ENUM_TIMEFRAMES)_Period);				}
-	CCommonBase(ENUM_TIMEFRAMES timeframe)										{	Init(_Symbol,	timeframe);									}
-	CCommonBase(string symbol, ENUM_TIMEFRAMES timeframe)					{	Init(symbol,	timeframe);									}
+    /**
+     * @brief Constructor with timeframe.
+     */
+    CCommonBase(ENUM_TIMEFRAMES timeframe) : CCommonBase(_Symbol, timeframe) {}
 
-	//
-	//	Destructors
-	//
-	~CCommonBase()	{};
-	
-	int					Init(string symbol, ENUM_TIMEFRAMES timeframe);
+    /**
+     * @brief Constructor with symbol and timeframe.
+     */
+    CCommonBase(string symbol, ENUM_TIMEFRAMES timeframe) {
+        Init(symbol, timeframe);
+    }
 
-protected:	//	Functions
+    /// @brief Destructor.
+    ~CCommonBase() {}
 
-	int					SetInitResult(string initMessage, int initResult)	{	mInitMessage = initMessage; mInitResult = initResult; return(initResult);	}
-	
-public:	//	Properties
+    /// @brief Get the initialization result.
+    int InitResult() const { return mInitResult; }
 
-	int					InitResult()												{	return(mInitResult);											}
-	string				InitMessage()												{	return(mInitMessage);										}
-	
-public:	//	Functions
+    /// @brief Get the initialization message.
+    string InitMessage() const { return mInitMessage; }
 
-	bool					TradeAllowed()												{	return(MarketInfo(mSymbol, MODE_TRADEALLOWED)>0);	}	
+    /// @brief Check if trading is allowed for the symbol.
+    bool TradeAllowed() const { return MarketInfo(mSymbol, MODE_TRADEALLOWED) > 0; }
 };
 
-int	CCommonBase::Init(string symbol, ENUM_TIMEFRAMES timeframe) {
-
-	SetInitResult("", INIT_SUCCEEDED);
-	
-	mSymbol		=	symbol;
-	mTimeframe	=	timeframe;
-	mDigits		=	(int)MarketInfo(symbol, MODE_DIGITS);
-	
-	return(INIT_SUCCEEDED);
-	
+int CCommonBase::Init(string symbol, ENUM_TIMEFRAMES timeframe) {
+    SetInitResult("", INIT_SUCCEEDED);
+    
+    mSymbol = symbol;
+    mTimeframe = timeframe;
+    mDigits = (int)MarketInfo(symbol, MODE_DIGITS);
+    
+    return INIT_SUCCEEDED;
 }
